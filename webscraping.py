@@ -1,64 +1,74 @@
 import requests
-from bs4 import BeautifulSoup
 import re
+from bs4 import BeautifulSoup
 
 
-# Coletar a primeira página da lista de artistas
-page = requests.get('https://fangj.github.io/friends/')
-soup = BeautifulSoup(page.text, 'html.parser')
-dataSet = soup.find_all('a')
-dataSet = str(dataSet)
-links = []
+def get_links_episodios_friends():
+    pagina_falas_friends = requests.get('https://fangj.github.io/friends/')
+    soup_pagina = BeautifulSoup(pagina_falas_friends.text, 'html.parser')
+    dataset_tags_links_episodios = soup_pagina.find_all('a')
 
-file = open("links.csv", "w")
+    links_episodios = []
 
-for linha in dataSet.split('<a href="'):
-    links.append('https://fangj.github.io/friends/'+ linha.split('">')[0]+"\n")
-del links[0]
+    for tag in dataset_tags_links_episodios:
+        resultado = re.search(r'href=\"(.+\.html)\"', str(tag))
+        if resultado:
+            link_completo = 'https://fangj.github.io/friends/' + resultado.group(1)
+            links_episodios.append(link_completo)
 
-for linha in links:
-    file.write(linha)
+    return links_episodios
 
 
-print(links)
+def write_links_episodios_friends(links_episodios):
+    with open("links_episodios.csv", "w") as arquivo:
+        for link in links_episodios:
+            arquivo.write(link)
 
-file.close()
 
-links = open("links.csv", "r")
-falas = open("falas.txt", "a")
+def get_all_falas():
+    links = get_links_episodios_friends()
+    falas_todos_episodios = []
+    count = 0
+    for link in links:
+        count += 1
+        print('Carregando episódio ' + str(count) + '...')
+        falas_todos_episodios.append(get_falas_episodio(link))
+    return falas_todos_episodios
 
-regex = re.compile('[^a-zA-Z\'\n ]')
-count = 0
 
-for link in links:
-    page = requests.get(link.split("\n")[0])
-    soup = BeautifulSoup(page.text, 'html.parser')
-    texto = soup.find_all("p")
-    for linha in texto:
-        # Remove as tags
-        verificar = True
-        frase = ""
-        for letra in str(linha):
-            if (verificar == False):
-                if (letra == ">"):
-                    verificar = True
-            else:
-                if (letra == "<"):
-                    verificar = False
-                else:
-                    frase = frase + letra
-        # Remove o autor da frase
-        frase = frase.split(":")
-        if (len(frase) > 1):
-            frase = frase[1]
-            # Retira espaços e numeros
-            frase = frase.strip()
-            frase = regex.sub("", frase)
-            frase = frase.lower()
-            frase = frase.replace("\n", " ")
-            if (frase != ""):
-                falas.write(frase + "\n")
-    count += 1
-    print(link)
-    print(count)
+def get_falas_episodio(link_episodio):
+    pagina_episodio = requests.get(link_episodio)
+    soup = BeautifulSoup(pagina_episodio.text, 'html.parser')
+    falas_tags = soup.find_all("p")
 
+    falas = []
+
+    for tag in falas_tags:
+        personagem = re.search(r'<b>(.+)<\/b>', str(tag))
+        fala = re.search(r'<p.+>(.+)<\/p>', str(tag).replace('\n', ''))
+        if personagem:
+            personagem = remove_tags(personagem.group(1)).strip()
+            falas.append(personagem)
+        if fala:
+            fala = remove_tags(fala.group(1)).strip()
+            falas.append(fala)
+
+    return falas
+
+
+def write_falas(falas_todos_episodios):
+    with open("falas_todos_episodios.csv", "w") as arquivo:
+        for episodio in falas_todos_episodios:
+            for fala in episodio:
+                arquivo.write(fala)
+
+
+def remove_tags(string):
+    tags = ['</strong>', '</b>', '</font>', '<b>']
+    for tag in tags:
+        if tag in string:
+            string = string.replace(tag, '')
+    return string
+
+
+write_falas(get_all_falas())
